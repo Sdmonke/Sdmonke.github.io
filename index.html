@@ -1,2 +1,216 @@
-<h1>literally a test site.</h1>
-might add some cool stuff and games on here.
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Line-by-Line TTS Reader</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        .container {
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+            resize: vertical;
+            margin-bottom: 20px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary {
+            background-color: #0070f3;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #0051a8;
+        }
+        .btn-secondary {
+            background-color: #e2e8f0;
+            color: #4a5568;
+        }
+        .btn-secondary:hover {
+            background-color: #cbd5e1;
+        }
+        button:disabled {
+            background-color: #e2e8f0;
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+        #text-display {
+            line-height: 1.8;
+            font-size: 18px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        .line {
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .line.active {
+            background-color: #fef08a; /* Yellow highlight */
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Line-by-Line TTS Reader</h2>
+    
+    <textarea id="text-input" placeholder="Paste your text here... Each paragraph or line breaks will be read one by one.">Hello! Welcome to the line-by-line text to speech tool.
+This tool will break your text down by lines.
+Clicking the "Read Next Line" button will advance the text.
+Give it a try by clicking the button below!</textarea>
+
+    <div class="controls">
+        <button id="load-btn" class="btn-secondary">1. Lock Text</button>
+        <button id="next-btn" class="btn-primary" disabled>▶ Read Next Line</button>
+        <button id="pause-btn" class="btn-secondary" disabled>Pause</button>
+        <button id="reset-btn" class="btn-secondary" disabled>Reset</button>
+    </div>
+
+    <div id="text-display"></div>
+</div>
+
+<script>
+    const synth = window.speechSynthesis;
+    
+    let lines = [];
+    let currentLineIndex = -1;
+    let utterance = null;
+
+    const textInput = document.getElementById('text-input');
+    const loadBtn = document.getElementById('load-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const textDisplay = document.getElementById('text-display');
+
+    // Parse text input into distinct non-empty lines
+    loadBtn.addEventListener('click', () => {
+        const rawText = textInput.value;
+        lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        
+        if (lines.length === 0) {
+            alert("Please enter some text first.");
+            return;
+        }
+
+        // Render lines visually
+        textDisplay.innerHTML = lines.map((line, index) => 
+            `<div class="line" id="line-${index}">${line}</div>`
+        ).join('');
+
+        currentLineIndex = -1;
+        textInput.disabled = true;
+        loadBtn.disabled = true;
+        nextBtn.disabled = false;
+        resetBtn.disabled = false;
+        
+        // Auto trigger the first line
+        readNextLine();
+    });
+
+    function readNextLine() {
+        // Stop any ongoing speech immediately
+        synth.cancel();
+
+        // Remove active styling from previous line
+        if (currentLineIndex >= 0 && currentLineIndex < lines.length) {
+            document.getElementById(`line-${currentLineIndex}`).classList.remove('active');
+        }
+
+        currentLineIndex++;
+
+        // Check if we reached the end of the text
+        if (currentLineIndex >= lines.length) {
+            textDisplay.innerHTML += `<p style="color: green; font-weight: bold;">🎉 Finished reading!</p>`;
+            nextBtn.disabled = true;
+            pauseBtn.disabled = true;
+            return;
+        }
+
+        // Highlight current line and scroll into view
+        const currentLineElem = document.getElementById(`line-${currentLineIndex}`);
+        currentLineElem.classList.add('active');
+        currentLineElem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        // Configure Speech Synthesis
+        utterance = new SpeechSynthesisUtterance(lines[currentLineIndex]);
+        
+        utterance.onend = () => {
+            pauseBtn.disabled = true;
+            pauseBtn.textContent = "Pause";
+        };
+
+        utterance.onerror = () => {
+            pauseBtn.disabled = true;
+        };
+
+        synth.speak(utterance);
+        pauseBtn.disabled = false;
+        pauseBtn.textContent = "Pause";
+    }
+
+    nextBtn.addEventListener('click', () => {
+        if (synth.paused) {
+            synth.resume();
+            pauseBtn.textContent = "Pause";
+        }
+        readNextLine();
+    });
+
+    pauseBtn.addEventListener('click', () => {
+        if (synth.speaking && !synth.paused) {
+            synth.pause();
+            pauseBtn.textContent = "Resume";
+        } else if (synth.paused) {
+            synth.resume();
+            pauseBtn.textContent = "Pause";
+        }
+    });
+
+    resetBtn.addEventListener('click', () => {
+        synth.cancel();
+        textDisplay.innerHTML = '';
+        textInput.disabled = false;
+        loadBtn.disabled = false;
+        nextBtn.disabled = true;
+        pauseBtn.disabled = true;
+        resetBtn.disabled = true;
+        pauseBtn.textContent = "Pause";
+        currentLineIndex = -1;
+    });
+</script>
+
+</body>
+</html>
