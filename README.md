@@ -1,2 +1,2 @@
 # Sdmonke.github.io
-#being a sigma
+#line by line tts reader for stuff all ai code btw 
