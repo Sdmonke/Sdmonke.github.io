@@ -3,214 +3,205 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Line-by-Line TTS Reader</title>
+    <title>Line-by-Line TTS for Spelling Practice</title>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            max-width: 800px;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 600px;
             margin: 40px auto;
             padding: 0 20px;
             background-color: #f9f9f9;
             color: #333;
         }
-        .container {
-            background: #fff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
         textarea {
             width: 100%;
             height: 150px;
             padding: 12px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
             box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 8px;
             font-size: 16px;
             resize: vertical;
-            margin-bottom: 20px;
         }
         .controls {
+            margin-top: 15px;
             display: flex;
             gap: 10px;
-            margin-bottom: 25px;
-            flex-wrap: wrap;
         }
         button {
-            padding: 12px 20px;
+            padding: 12px 24px;
             font-size: 16px;
-            font-weight: 600;
+            font-weight: bold;
             border: none;
             border-radius: 6px;
             cursor: pointer;
             transition: background 0.2s;
         }
-        .btn-primary {
-            background-color: #0070f3;
+        #loadBtn {
+            background-color: #007bff;
             color: white;
         }
-        .btn-primary:hover {
-            background-color: #0051a8;
+        #loadBtn:hover {
+            background-color: #0056b3;
         }
-        .btn-secondary {
-            background-color: #e2e8f0;
-            color: #4a5568;
+        #nextBtn {
+            background-color: #28a745;
+            color: white;
+            flex-grow: 1;
         }
-        .btn-secondary:hover {
-            background-color: #cbd5e1;
+        #nextBtn:hover {
+            background-color: #218838;
         }
-        button:disabled {
-            background-color: #e2e8f0;
-            color: #94a3b8;
+        #nextBtn:disabled {
+            background-color: #6c757d;
             cursor: not-allowed;
         }
-        #text-display {
-            line-height: 1.8;
-            font-size: 18px;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
+        #resetBtn {
+            background-color: #dc3545;
+            color: white;
         }
-        .line {
-            padding: 2px 6px;
-            border-radius: 4px;
-            transition: background-color 0.3s;
+        #resetBtn:hover {
+            background-color: #bd2130;
         }
-        .line.active {
-            background-color: #fef08a; /* Yellow highlight */
-            font-weight: 500;
+        .display-box {
+            margin-top: 25px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            min-height: 60px;
+        }
+        .current-line {
+            font-size: 20px;
+            font-weight: 600;
+            color: #111;
+            line-height: 1.4;
+        }
+        .status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Line-by-Line TTS Reader</h2>
+    <h2>Line-by-Line Text-to-Speech</h2>
     
-    <textarea id="text-input" placeholder="Paste your text here... Each paragraph or line breaks will be read one by one.">Hello! Welcome to the line-by-line text to speech tool.
-This tool will break your text down by lines.
-Clicking the "Read Next Line" button will advance the text.
-Give it a try by clicking the button below!</textarea>
-
+    <textarea id="textInput" placeholder="Paste your text here...&#10;Each line break will create a separate step." oninput="saveText()"></textarea>
+    
     <div class="controls">
-        <button id="load-btn" class="btn-secondary">1. Lock Text</button>
-        <button id="next-btn" class="btn-primary" disabled>▶ Read Next Line</button>
-        <button id="pause-btn" class="btn-secondary" disabled>Pause</button>
-        <button id="reset-btn" class="btn-secondary" disabled>Reset</button>
+        <button id="loadBtn" onclick="loadText()">Load Text</button>
+        <button id="nextBtn" onclick="readNextLine()" disabled>Read Next Line</button>
+        <button id="resetBtn" onclick="resetProgress()" title="Reset reading progress to line 1">Reset Progress</button>
     </div>
 
-    <div id="text-display"></div>
-</div>
+    <div class="display-box">
+        <div id="currentLineDisplay" class="current-line">Click "Load Text" to begin.</div>
+        <div id="statusDisplay" class="status"></div>
+    </div>
 
-<script>
-    const synth = window.speechSynthesis;
-    
-    let lines = [];
-    let currentLineIndex = -1;
-    let utterance = null;
+    <script>
+        let lines = [];
+        let currentIndex = 0;
+        const synth = window.speechSynthesis;
 
-    const textInput = document.getElementById('text-input');
-    const loadBtn = document.getElementById('load-btn');
-    const nextBtn = document.getElementById('next-btn');
-    const pauseBtn = document.getElementById('pause-btn');
-    const resetBtn = document.getElementById('reset-btn');
-    const textDisplay = document.getElementById('text-display');
+        // Automatically load saved text and position when the page opens
+        window.onload = function() {
+            const savedText = localStorage.getItem('tts_saved_text');
+            const savedIndex = localStorage.getItem('tts_saved_index');
 
-    // Parse text input into distinct non-empty lines
-    loadBtn.addEventListener('click', () => {
-        const rawText = textInput.value;
-        lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-        
-        if (lines.length === 0) {
-            alert("Please enter some text first.");
-            return;
-        }
+            if (savedText) {
+                document.getElementById('textInput').value = savedText;
+                
+                // If text existed before, process it into lines
+                lines = savedText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+                
+                if (lines.length > 0) {
+                    currentIndex = savedIndex ? parseInt(savedIndex, 10) : 0;
+                    
+                    // Cap index if text changed outside of session unexpectedly
+                    if (currentIndex >= lines.length) currentIndex = 0;
 
-        // Render lines visually
-        textDisplay.innerHTML = lines.map((line, index) => 
-            `<div class="line" id="line-${index}">${line}</div>`
-        ).join('');
-
-        currentLineIndex = -1;
-        textInput.disabled = true;
-        loadBtn.disabled = true;
-        nextBtn.disabled = false;
-        resetBtn.disabled = false;
-        
-        // Auto trigger the first line
-        readNextLine();
-    });
-
-    function readNextLine() {
-        // Stop any ongoing speech immediately
-        synth.cancel();
-
-        // Remove active styling from previous line
-        if (currentLineIndex >= 0 && currentLineIndex < lines.length) {
-            document.getElementById(`line-${currentLineIndex}`).classList.remove('active');
-        }
-
-        currentLineIndex++;
-
-        // Check if we reached the end of the text
-        if (currentLineIndex >= lines.length) {
-            textDisplay.innerHTML += `<p style="color: green; font-weight: bold;">🎉 Finished reading!</p>`;
-            nextBtn.disabled = true;
-            pauseBtn.disabled = true;
-            return;
-        }
-
-        // Highlight current line and scroll into view
-        const currentLineElem = document.getElementById(`line-${currentLineIndex}`);
-        currentLineElem.classList.add('active');
-        currentLineElem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-        // Configure Speech Synthesis
-        utterance = new SpeechSynthesisUtterance(lines[currentLineIndex]);
-        
-        utterance.onend = () => {
-            pauseBtn.disabled = true;
-            pauseBtn.textContent = "Pause";
+                    document.getElementById('nextBtn').disabled = false;
+                    
+                    if (currentIndex === 0) {
+                        document.getElementById('nextBtn').innerText = "Read First Line";
+                        document.getElementById('currentLineDisplay').innerText = "Text loaded from memory. Ready to read.";
+                    } else {
+                        document.getElementById('nextBtn').innerText = "Read Next Line";
+                        document.getElementById('currentLineDisplay').innerText = `Resuming... Last read line was line ${currentIndex}.`;
+                    }
+                    document.getElementById('statusDisplay').innerText = `Progress: Line ${currentIndex} of ${lines.length}`;
+                }
+            }
         };
 
-        utterance.onerror = () => {
-            pauseBtn.disabled = true;
-        };
-
-        synth.speak(utterance);
-        pauseBtn.disabled = false;
-        pauseBtn.textContent = "Pause";
-    }
-
-    nextBtn.addEventListener('click', () => {
-        if (synth.paused) {
-            synth.resume();
-            pauseBtn.textContent = "Pause";
+        // Saves text dynamically as the user types
+        function saveText() {
+            const rawText = document.getElementById('textInput').value;
+            localStorage.setItem('tts_saved_text', rawText);
         }
-        readNextLine();
-    });
 
-    pauseBtn.addEventListener('click', () => {
-        if (synth.speaking && !synth.paused) {
-            synth.pause();
-            pauseBtn.textContent = "Resume";
-        } else if (synth.paused) {
-            synth.resume();
-            pauseBtn.textContent = "Pause";
+        function loadText() {
+            saveText(); // Double check current content is saved
+            const rawText = document.getElementById('textInput').value;
+            
+            lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            
+            if (lines.length === 0) {
+                alert('Please enter some text first.');
+                return;
+            }
+
+            currentIndex = 0;
+            localStorage.setItem('tts_saved_index', currentIndex);
+            
+            document.getElementById('nextBtn').disabled = false;
+            document.getElementById('nextBtn').innerText = "Read First Line";
+            document.getElementById('currentLineDisplay').innerText = "Text processed. Ready to read.";
+            document.getElementById('statusDisplay').innerText = `Total lines: ${lines.length}`;
+            
+            synth.cancel();
         }
-    });
 
-    resetBtn.addEventListener('click', () => {
-        synth.cancel();
-        textDisplay.innerHTML = '';
-        textInput.disabled = false;
-        loadBtn.disabled = false;
-        nextBtn.disabled = true;
-        pauseBtn.disabled = true;
-        resetBtn.disabled = true;
-        pauseBtn.textContent = "Pause";
-        currentLineIndex = -1;
-    });
-</script>
+        function readNextLine() {
+            if (currentIndex >= lines.length) {
+                document.getElementById('currentLineDisplay').innerText = "Finished reading all lines!";
+                document.getElementById('statusDisplay').innerText = "";
+                document.getElementById('nextBtn').disabled = true;
+                document.getElementById('nextBtn').innerText = "Read Next Line";
+                return;
+            }
 
+            synth.cancel();
+
+            const textToSpeak = lines[currentIndex];
+            
+            document.getElementById('currentLineDisplay').innerText = textToSpeak;
+            document.getElementById('statusDisplay').innerText = `Line ${currentIndex + 1} of ${lines.length}`;
+            document.getElementById('nextBtn').innerText = "Read Next Line";
+
+            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+            synth.speak(utterance);
+
+            currentIndex++;
+            // Save the next target index to memory
+            localStorage.setItem('tts_saved_index', currentIndex);
+        }
+
+        function resetProgress() {
+            currentIndex = 0;
+            localStorage.setItem('tts_saved_index', currentIndex);
+            synth.cancel();
+            
+            if (lines.length > 0) {
+                document.getElementById('nextBtn').disabled = false;
+                document.getElementById('nextBtn').innerText = "Read First Line";
+                document.getElementById('currentLineDisplay').innerText = "Progress reset. Ready to read from the beginning.";
+                document.getElementById('statusDisplay').innerText = `Line 0 of ${lines.length}`;
+            }
+        }
+    </script>
 </body>
 </html>
